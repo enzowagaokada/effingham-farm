@@ -1,11 +1,13 @@
 import json
+import os
 import paho.mqtt.client as mqtt
 from supabase import create_client, Client
-from pprint import pprint
+from dotenv import load_dotenv
 
+load_dotenv()
 # --- Supabase Setup ---
-url: str = "https://bzrdhpodfpbqhsxlxapq.supabase.co"
-key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6cmRocG9kZnBicWhzeGx4YXBxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTYxNzk4MSwiZXhwIjoyMDc3MTkzOTgxfQ.0qVe6me94dXuQttgHH7KnVpE6zT6Tw29Pfot5X1dQy8"
+url: str = os.getenv("SUPABASE_URL")
+key: str = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 def on_connect(mqttc, obj, flags, rc):
