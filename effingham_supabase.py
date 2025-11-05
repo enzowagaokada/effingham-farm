@@ -34,11 +34,10 @@ def on_message(mqttc, obj, msg):
         print(f"Processing message from Device: {device_eui}, Brand: {brand_name}")
 
         # --- Step 1: Ensure Brand and Device exist in DB ---
-        brand_data = supabase.table("Brands").upsert({"brand_name": brand_name}, on_conflict="brand_name").execute().data
-        brand_id = brand_data[0]['id']
+        supabase.table("Brands").upsert({"brand_name": brand_name}, on_conflict="brand_name").execute().data
 
-        device_data = supabase.table("Devices").upsert({"device_eui": device_eui, "brand_id": brand_id}, on_conflict="device_eui").execute().data
-        device_id = device_data[0]['id']
+        device_data = supabase.table("Devices").upsert({"device_eui": device_eui, "brand": brand_name}, on_conflict="device_eui").execute().data
+        device_name = device_data[0]['sensor_name']
 
         # --- Step 2: Route and Insert sensor data based on brand ---
 
@@ -46,7 +45,7 @@ def on_message(mqttc, obj, msg):
         if brand_name == "tektelic" and uplink_message.get('f_port') == 10:
             print("-> Tektelic sensor data found. Inserting into SoilSensorReadings.")
             data_to_insert = {
-                "device_id": device_id,
+                "sensor_name": device_name,
                 "ambient_temperature": decoded_payload.get('ambient_temperature'),
                 "light_intensity": decoded_payload.get('light_intensity'),
                 "relative_humidity": decoded_payload.get('relative_humidity'),
@@ -60,7 +59,7 @@ def on_message(mqttc, obj, msg):
         elif brand_name == "elsys":
             print("-> Elsys sensor data found. Inserting into ClimateReadings.")
             data_to_insert = {
-                "device_id": device_id,
+                "sensor_name": device_name,
                 "temperature": decoded_payload.get('temperature'),
                 "humidity": decoded_payload.get('humidity'),
                 "pressure": decoded_payload.get('pressure'),
