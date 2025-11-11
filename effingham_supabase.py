@@ -39,6 +39,11 @@ def on_message(mqttc, obj, msg):
         device_data = supabase.table("Devices").upsert({"device_eui": device_eui, "brand": brand_name}, on_conflict="device_eui").execute().data
         device_name = device_data[0]['sensor_name']
 
+        # --- Check if sensor_name is set before inserting readings ---
+        if device_name is None:
+            print(f"-> Device {device_eui} exists but sensor_name is not set. Skipping reading insertion.")
+            return
+
         # --- Step 2: Route and Insert sensor data based on brand ---
 
         # Handle Tektelic soil sensors
