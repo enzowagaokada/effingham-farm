@@ -3,12 +3,35 @@ import os
 import paho.mqtt.client as mqtt
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import re
 
 load_dotenv()
 # --- Supabase Setup ---
 url: str = os.getenv("SUPABASE_URL")
 key: str = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
+
+def to_est(ts: str) -> str | None:
+    """
+    Convert received_at time to 'YYYY-MM-DD HH:MM:SS' in America/New_York.
+    Returns None if ts is falsy or unparsable.
+    """
+    if not ts:
+        return None
+    try:
+        m = re.match(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?Z$', ts)
+        if m:
+            base, frac = m.group(1), (m.group(2) or '')
+            frac6 = (frac[:6]).ljust(6, '0')  # microseconds for Python
+            dt_utc = datetime.fromisoformat(f"{base}.{frac6}+00:00")
+        else:
+            dt_utc = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+        et = dt_utc.astimezone(ZoneInfo("America/New_York"))
+        return et.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return None
 
 def on_connect(mqttc, obj, flags, rc):
     """Callback for when the client connects to the MQTT broker."""
@@ -27,6 +50,15 @@ def on_message(mqttc, obj, msg):
         uplink_message = payload.get('uplink_message', {})
         brand_name = uplink_message.get('version_ids', {}).get('brand_id')
         decoded_payload = uplink_message.get('decoded_payload')
+        received_at_raw = uplink_message.get('received_at') or payload.get('received_at')
+
+
+        if not received_at_raw:
+            for md in uplink_message.get('rx_metadata') or []:
+                received_at_raw = md.get('received_at') or md.get('time')
+                if received_at_raw:
+                    break
+        received_at_est = to_est(received_at_raw)
 
         if not all([device_eui, brand_name, decoded_payload]):
             return # Skip if essential info is missing
@@ -55,7 +87,8 @@ def on_message(mqttc, obj, msg):
                 "light_intensity": decoded_payload.get('light_intensity'),
                 "relative_humidity": decoded_payload.get('relative_humidity'),
                 "soil_temperature": decoded_payload.get('Input3_voltage_to_temp'),
-                "soil_moisture": decoded_payload.get('watermark1_tension')
+                "soil_moisture": decoded_payload.get('watermark1_tension'),
+                "received_at": received_at_est
             }
             supabase.table("SoilSensorReadings").insert(data_to_insert).execute()
             print("-> Successfully inserted soil data.")
@@ -68,7 +101,8 @@ def on_message(mqttc, obj, msg):
                 "temperature": decoded_payload.get('temperature'),
                 "humidity": decoded_payload.get('humidity'),
                 "pressure": decoded_payload.get('pressure'),
-                "co2": decoded_payload.get('co2')
+                "co2": decoded_payload.get('co2'),
+                "received_at": received_at_est
             }
             supabase.table("ClimateReadings").insert(data_to_insert).execute()
             print("-> Successfully inserted climate data.")
